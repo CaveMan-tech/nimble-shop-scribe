@@ -12,6 +12,7 @@ interface AuthContextType {
   profile: Profile | null;
   organization: Organization | null;
   loading: boolean;
+  hasRole: (roles: string[]) => boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string, organizationName: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -80,6 +81,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const hasRole = (roles: string[]): boolean => {
+    if (!profile || !profile.role) return false;
+    return roles.includes(profile.role);
+  };
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -131,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     profile,
     organization,
     loading,
+    hasRole,
     signIn,
     signUp,
     signOut,
