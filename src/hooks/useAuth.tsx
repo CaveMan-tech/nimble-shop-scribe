@@ -1,34 +1,25 @@
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
-import { Tables } from '@/integrations/supabase/types';
+import type { Database } from '@/integrations/supabase/types';
 
-type Profile = Tables<'profiles'>;
-type Organization = Tables<'organizations'>;
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type Organization = Database['public']['Tables']['organizations']['Row'];
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   organization: Organization | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string, organizationName?: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, organizationName: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  hasRole: (roles: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -39,7 +30,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        loadUserProfile(session.user.id);
+        fetchUserProfile(session.user.id);
       } else {
         setLoading(false);
       }
@@ -49,7 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        await loadUserProfile(session.user.id);
+        await fetchUserProfile(session.user.id);
       } else {
         setProfile(null);
         setOrganization(null);
@@ -60,7 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (userId: string) => {
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -72,7 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setProfile(profileData);
 
-      if (profileData.organization_id) {
+      if (profileData?.organization_id) {
         const { data: orgData, error: orgError } = await supabase
           .from('organizations')
           .select('*')
@@ -83,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setOrganization(orgData);
       }
     } catch (error) {
-      console.error('Error loading user profile:', error);
+      console.error('Error fetching user profile:', error);
     } finally {
       setLoading(false);
     }
@@ -94,46 +85,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
     });
-    if (error) throw error;
+    return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, organizationName?: string) => {
-    let organizationId = null;
-
-    // If organizationName is provided, create new organization (for super admin signup)
-    if (organizationName) {
+  const signUp = async (email: string, password: string, fullName: string, organizationName: string) => {
+    try {
+      // First create the organization
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
-        .insert([{ name: organizationName }])
+        .insert({ name: organizationName })
         .select()
         .single();
 
       if (orgError) throw orgError;
-      organizationId = orgData.id;
+
+      // Then sign up the user with organization metadata
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            organization_id: orgData.id,
+            role: 'super_admin'
+          },
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      });
+
+      return { error: signUpError };
+    } catch (error) {
+      return { error };
     }
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          organization_id: organizationId,
-          role: organizationName ? 'super_admin' : 'sales_person',
-        },
-      },
-    });
-
-    if (error) throw error;
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  };
-
-  const hasRole = (roles: string[]) => {
-    return profile ? roles.includes(profile.role) : false;
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    setOrganization(null);
   };
 
   const value = {
@@ -144,8 +134,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     signIn,
     signUp,
     signOut,
-    hasRole,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };
