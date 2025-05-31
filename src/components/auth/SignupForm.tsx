@@ -22,12 +22,21 @@ export const SignupForm = () => {
     setLoading(true);
 
     try {
-      await signUp(email, password, fullName, organizationName);
-      toast({
-        title: "Success",
-        description: "Organization created! Please check your email to verify your account.",
-      });
-      navigate('/login');
+      const { error } = await signUp(email, password, fullName, organizationName);
+      
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to create organization",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Organization created! Please check your email to verify your account.",
+        });
+        navigate('/login');
+      }
     } catch (error: any) {
       toast({
         title: "Error",

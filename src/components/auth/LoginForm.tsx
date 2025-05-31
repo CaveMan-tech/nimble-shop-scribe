@@ -20,12 +20,21 @@ export const LoginForm = () => {
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      toast({
-        title: "Success",
-        description: "Logged in successfully!",
-      });
-      navigate('/dashboard');
+      const { error } = await signIn(email, password);
+      
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to log in",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Logged in successfully!",
+        });
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       toast({
         title: "Error",

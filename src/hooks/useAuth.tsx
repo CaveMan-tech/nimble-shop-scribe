@@ -27,24 +27,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        fetchUserProfile(session.user.id);
+        // Use setTimeout to avoid blocking the auth state change
+        setTimeout(() => {
+          fetchUserProfile(session.user.id);
+        }, 0);
       } else {
+        setProfile(null);
+        setOrganization(null);
         setLoading(false);
       }
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session:', session?.user?.id);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await fetchUserProfile(session.user.id);
+        fetchUserProfile(session.user.id);
       } else {
-        setProfile(null);
-        setOrganization(null);
         setLoading(false);
       }
     });
@@ -54,14 +60,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+        throw profileError;
+      }
 
+      console.log('Profile data:', profileData);
       setProfile(profileData);
 
       if (profileData?.organization_id) {
@@ -71,7 +82,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('id', profileData.organization_id)
           .single();
 
-        if (orgError) throw orgError;
+        if (orgError) {
+          console.error('Organization fetch error:', orgError);
+          throw orgError;
+        }
+
+        console.log('Organization data:', orgData);
         setOrganization(orgData);
       }
     } catch (error) {
@@ -87,15 +103,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
+    console.log('Attempting sign in for:', email);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    console.log('Sign in result:', error);
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string, organizationName: string) => {
     try {
+      console.log('Creating organization:', organizationName);
       // First create the organization
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
@@ -103,7 +122,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select()
         .single();
 
-      if (orgError) throw orgError;
+      if (orgError) {
+        console.error('Organization creation error:', orgError);
+        throw orgError;
+      }
+
+      console.log('Organization created:', orgData);
 
       // Then sign up the user with organization metadata
       const { error: signUpError } = await supabase.auth.signUp({
@@ -119,8 +143,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
+      console.log('Sign up result:', signUpError);
       return { error: signUpError };
     } catch (error) {
+      console.error('Sign up error:', error);
       return { error };
     }
   };
