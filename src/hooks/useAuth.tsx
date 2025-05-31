@@ -30,14 +30,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
-      setUser(session?.user ?? null);
       
       if (session?.user) {
+        setUser(session.user);
         // Use setTimeout to avoid blocking the auth state change
         setTimeout(() => {
           fetchUserProfile(session.user.id);
         }, 0);
       } else {
+        setUser(null);
         setProfile(null);
         setOrganization(null);
         setLoading(false);
@@ -45,15 +46,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session:', session?.user?.id);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      } else {
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Initial session:', session?.user?.id);
+        
+        if (session?.user) {
+          setUser(session.user);
+          await fetchUserProfile(session.user.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
         setLoading(false);
       }
-    });
+    };
+
+    initializeAuth();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -69,7 +79,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (profileError) {
         console.error('Profile fetch error:', profileError);
-        throw profileError;
+        setLoading(false);
+        return;
       }
 
       console.log('Profile data:', profileData);
@@ -84,11 +95,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (orgError) {
           console.error('Organization fetch error:', orgError);
-          throw orgError;
+        } else {
+          console.log('Organization data:', orgData);
+          setOrganization(orgData);
         }
-
-        console.log('Organization data:', orgData);
-        setOrganization(orgData);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -103,16 +113,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
+    setLoading(true);
     console.log('Attempting sign in for:', email);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    console.log('Sign in result:', error);
-    return { error };
+    
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      console.log('Sign in result:', error);
+      return { error };
+    } catch (error) {
+      console.error('Sign in error:', error);
+      return { error };
+    }
   };
 
   const signUp = async (email: string, password: string, fullName: string, organizationName: string) => {
+    setLoading(true);
+    
     try {
       console.log('Creating organization:', organizationName);
       // First create the organization
@@ -124,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (orgError) {
         console.error('Organization creation error:', orgError);
-        throw orgError;
+        return { error: orgError };
       }
 
       console.log('Organization created:', orgData);
@@ -139,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             organization_id: orgData.id,
             role: 'super_admin'
           },
-          emailRedirectTo: `${window.location.origin}/`
+          emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
 
@@ -148,6 +168,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Sign up error:', error);
       return { error };
+    } finally {
+      setLoading(false);
     }
   };
 

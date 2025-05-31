@@ -19,12 +19,23 @@ export const SignupForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password || !fullName || !organizationName) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { error } = await signUp(email, password, fullName, organizationName);
       
       if (error) {
+        console.error('Signup error:', error);
         toast({
           title: "Error",
           description: error.message || "Failed to create organization",
@@ -33,11 +44,12 @@ export const SignupForm = () => {
       } else {
         toast({
           title: "Success",
-          description: "Organization created! Please check your email to verify your account.",
+          description: "Organization created successfully! You can now log in.",
         });
         navigate('/login');
       }
     } catch (error: any) {
+      console.error('Signup error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create organization",
@@ -64,6 +76,7 @@ export const SignupForm = () => {
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -74,6 +87,7 @@ export const SignupForm = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -84,6 +98,7 @@ export const SignupForm = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -94,6 +109,7 @@ export const SignupForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

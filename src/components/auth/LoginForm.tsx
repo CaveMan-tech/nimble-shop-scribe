@@ -17,12 +17,23 @@ export const LoginForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { error } = await signIn(email, password);
       
       if (error) {
+        console.error('Login error:', error);
         toast({
           title: "Error",
           description: error.message || "Failed to log in",
@@ -33,9 +44,11 @@ export const LoginForm = () => {
           title: "Success",
           description: "Logged in successfully!",
         });
+        // Navigate to dashboard immediately
         navigate('/dashboard');
       }
     } catch (error: any) {
+      console.error('Login error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to log in",
@@ -62,6 +75,7 @@ export const LoginForm = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -72,6 +86,7 @@ export const LoginForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

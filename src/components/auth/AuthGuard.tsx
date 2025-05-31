@@ -11,6 +11,8 @@ export const AuthGuard = ({ children, requiredRoles }: AuthGuardProps) => {
   const { user, profile, loading } = useAuth();
   const location = useLocation();
 
+  console.log('AuthGuard - User:', !!user, 'Profile:', !!profile, 'Loading:', loading);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -19,11 +21,14 @@ export const AuthGuard = ({ children, requiredRoles }: AuthGuardProps) => {
     );
   }
 
-  if (!user || !profile) {
+  if (!user) {
+    console.log('AuthGuard - No user, redirecting to login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRoles && !requiredRoles.includes(profile.role)) {
+  // Allow access if user exists, even if profile is still loading
+  // This prevents redirect loops when profile data is being fetched
+  if (requiredRoles && profile && !requiredRoles.includes(profile.role)) {
     return <Navigate to="/unauthorized" replace />;
   }
 
